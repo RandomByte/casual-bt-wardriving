@@ -80,9 +80,9 @@ func handleKnownDevice(mac string, device device, knownDevice device) {
 		}
 	}
 
-	knownDevice.Count++
-	fmt.Printf("%vx Known device %s: %s\n", knownDevice.Count, knownDevice.Name, mac)
-	persist(mac, knownDevice)
+	device.Count = knownDevice.Count + 1
+	fmt.Printf("%vx Known device %s: %s\n", device.Count, device.Name, mac)
+	persist(mac, device)
 }
 
 func scan() string {

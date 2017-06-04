@@ -55,7 +55,7 @@ func loop() {
 			fmt.Printf("New device %s: %s\n", device.Name, mac)
 			handleNewDevice(mac, device)
 		} else {
-			fmt.Printf("Known device %s: %s\n", device.Name, mac)
+			fmt.Printf("%vx Known device %s: %s\n", device.Count, device.Name, mac)
 			handleKnownDevice(mac, device, *knownDevice)
 		}
 	}
@@ -66,7 +66,16 @@ func handleNewDevice(mac string, device device) {
 }
 
 func handleKnownDevice(mac string, device device, knownDevice device) {
+	if device.Name != knownDevice.Name {
+		fmt.Printf("Same MAC but different name: %s (new) vs. %s (known)\n", device.Name, knownDevice.Name)
 
+		err := dv.Write("nameclash"+time.Now().UTC().String(), []byte(fmt.Sprintf("%s, %s (new) vs. %s (known)", mac, device.Name, knownDevice.Name)))
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+	knownDevice.Count++
+	persist(mac, knownDevice)
 }
 
 func scan() string {

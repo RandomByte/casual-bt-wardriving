@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+type device struct {
+	mac, name string
+}
+
 var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)$")
 
 func printCommand(cmd *exec.Cmd) {
@@ -47,12 +51,14 @@ func scan() string {
 	return cmdOutput.String()
 }
 
-func parse(rawScanResult string) {
-	addresses := re.FindAllStringSubmatch(rawScanResult, -1)
-	for _, addr := range addresses {
-		mac := addr[1]
-		name := addr[2]
+func parse(rawScanResult string) []device {
+	devices := re.FindAllStringSubmatch(rawScanResult, -1)
+	result := make([]device, len(devices))
+	for i, device := range devices {
+		result[i].mac = device[1]
+		result[i].name = device[2]
 
-		fmt.Printf("MAC: %s - Name: %s\n", mac, name)
 	}
+
+	return result
 }

@@ -6,8 +6,10 @@ import (
 	"github.com/peterbourgon/diskv"
 	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
-	"strings"
+	"syscall"
+	"time"
 )
 
 type device struct {
@@ -21,6 +23,28 @@ var dv *diskv.Diskv
 func main() {
 	setupPersistence()
 
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, os.Kill, syscall.SIGTERM)
+	defer signal.Stop(sig)
+
+	for {
+		select {
+		case <-time.After(1 * time.Millisecond):
+			loop()
+		case s := <-sig:
+			fmt.Println("Got signal:", s)
+			fmt.Println("Quitting...")
+			return
+		}
+	}
+}
+
+func loop() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered", r)
+		}
+	}()
 	result := scan()
 	parsed := parse(result)
 	for _, device := range parsed {
@@ -55,7 +79,6 @@ func parse(rawScanResult string) []device {
 	for i, device := range devices {
 		result[i].mac = device[1]
 		result[i].name = device[2]
-
 	}
 
 	return result

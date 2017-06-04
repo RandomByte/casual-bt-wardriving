@@ -26,12 +26,12 @@ func TestCheckNew(t *testing.T) {
 	persist(device1)
 	defer dv.Erase(device1.mac)
 
-	if checkNew(device1) != true {
+	if checkNew(device1) == true {
 		t.Error("Device 1 should be known, but is new")
 	}
 
 	device2 := device{mac: "13:37:13:37:13:37", name: "//Device $('2 "}
-	if checkNew(device2) != false {
+	if checkNew(device2) == false {
 		t.Error("Device 2 should be new, but is known")
 	}
 }
@@ -42,7 +42,7 @@ func TestPersist(t *testing.T) {
 	persist(device)
 	defer dv.Erase(device.mac)
 
-	if checkNew(device) != true {
+	if checkNew(device) == true {
 		t.Error("Device not found in persistence")
 	}
 }

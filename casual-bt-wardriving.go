@@ -49,10 +49,10 @@ func loop() {
 	parsed := parse(result)
 	for _, device := range parsed {
 		if checkNew(device) {
-			fmt.Println("New")
-		} else {
-			fmt.Println("Known")
+			fmt.Printf("New device %s: %s\n", device.name, device.mac)
 			persist(device)
+		} else {
+			fmt.Printf("Known device %s: %s\n", device.name, device.mac)
 		}
 	}
 }
@@ -87,9 +87,9 @@ func parse(rawScanResult string) []device {
 func checkNew(device device) bool {
 	value, err := dv.Read(device.mac)
 	if err != nil {
-		return false
+		return true
 	}
-	return value != nil
+	return value == nil
 }
 
 func setupPersistence() {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 )
 
 func TestParse(t *testing.T) {
@@ -52,4 +53,32 @@ func TestPersist(t *testing.T) {
 	if result.Name != "Device 1" {
 		t.Errorf("Device name should be Device 1, but is %s", result.Name)
 	}
+}
+
+func TestHandleKnownDevice(t *testing.T) {
+	mac := "12:34:56:78:90:42"
+	device1 := device{Name: "Device 1", LastSeen: time.Now().Unix() - (5 * 60 * 60) + 1}
+	handleKnownDevice(mac, device1, device1)
+	defer dv.Erase(mac)
+
+	if readDevice(mac) != nil {
+		t.Error("Device 1 should not have been handled")
+	}
+
+	device2 := device{Name: "Device 2", LastSeen: time.Now().Unix() - (5 * 60 * 60) - 1, Count: 5}
+
+	handleKnownDevice(mac, device2, device2)
+	result := readDevice(mac)
+	if result == nil {
+		t.Error("Device 2 should have been handled")
+	}
+
+	if result.Count != 6 {
+		t.Errorf("Device 2 should have an increased count of 6, but is %s", result.Count)
+	}
+
+	// device3 := device{Name: "Device 3", LastSeen: time.Now().Unix() - 5*60*59}
+	// device4 := device{Name: "Device 4", LastSeen: time.Now().Unix() - 5*60*59}
+	// TODO check nameclash handling
+
 }

@@ -14,8 +14,9 @@ import (
 )
 
 type device struct {
-	Name  string
-	Count int
+	Name     string
+	Count    int
+	LastSeen int64
 }
 
 var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)$")
@@ -51,30 +52,36 @@ func loop() {
 	parsed := parse(result)
 	for mac, device := range parsed {
 		knownDevice := readDevice(mac)
-		if knownDevice != nil {
-			fmt.Printf("New device %s: %s\n", device.Name, mac)
+		if knownDevice == nil {
 			handleNewDevice(mac, device)
 		} else {
-			fmt.Printf("%vx Known device %s: %s\n", device.Count, device.Name, mac)
 			handleKnownDevice(mac, device, *knownDevice)
 		}
 	}
 }
 
 func handleNewDevice(mac string, device device) {
+	fmt.Printf("New device %s: %s\n", device.Name, mac)
 	persist(mac, device)
 }
 
 func handleKnownDevice(mac string, device device, knownDevice device) {
+	if time.Since(time.Unix(knownDevice.LastSeen, 0)).Hours() < 5 {
+		// Last seen less then five hours ago
+		return
+	}
+
 	if device.Name != knownDevice.Name {
 		fmt.Printf("Same MAC but different name: %s (new) vs. %s (known)\n", device.Name, knownDevice.Name)
 
-		err := dv.Write("nameclash"+time.Now().UTC().String(), []byte(fmt.Sprintf("%s, %s (new) vs. %s (known)", mac, device.Name, knownDevice.Name)))
+		err := dv.Write("nameclash"+mac+string(time.Now().Unix()), []byte(fmt.Sprintf("%s, %s (new) vs. %s (known)", mac, device.Name, knownDevice.Name)))
 		if err != nil {
 			fmt.Println(err)
 		}
 	}
+
 	knownDevice.Count++
+	fmt.Printf("%vx Known device %s: %s\n", knownDevice.Count, knownDevice.Name, mac)
 	persist(mac, knownDevice)
 }
 
@@ -98,7 +105,7 @@ func parse(rawScanResult string) map[string]device {
 	matches := re.FindAllStringSubmatch(rawScanResult, -1)
 	devices := make(map[string]device)
 	for _, match := range matches {
-		devices[match[1]] = device{Name: match[2]}
+		devices[match[1]] = device{Name: match[2], LastSeen: time.Now().Unix()}
 	}
 
 	return devices

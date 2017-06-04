@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/peterbourgon/diskv"
 	"os"
@@ -13,7 +14,8 @@ import (
 )
 
 type device struct {
-	mac, name string
+	Name  string
+	Count int
 }
 
 var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)$")
@@ -47,14 +49,24 @@ func loop() {
 	}()
 	result := scan()
 	parsed := parse(result)
-	for _, device := range parsed {
-		if checkNew(device) {
-			fmt.Printf("New device %s: %s\n", device.name, device.mac)
-			persist(device)
+	for mac, device := range parsed {
+		knownDevice := readDevice(mac)
+		if knownDevice != nil {
+			fmt.Printf("New device %s: %s\n", device.Name, mac)
+			handleNewDevice(mac, device)
 		} else {
-			fmt.Printf("Known device %s: %s\n", device.name, device.mac)
+			fmt.Printf("Known device %s: %s\n", device.Name, mac)
+			handleKnownDevice(mac, device, *knownDevice)
 		}
 	}
+}
+
+func handleNewDevice(mac string, device device) {
+	persist(mac, device)
+}
+
+func handleKnownDevice(mac string, device device, knownDevice device) {
+
 }
 
 func scan() string {
@@ -73,23 +85,26 @@ func scan() string {
 	return cmdOutput.String()
 }
 
-func parse(rawScanResult string) []device {
-	devices := re.FindAllStringSubmatch(rawScanResult, -1)
-	result := make([]device, len(devices))
-	for i, device := range devices {
-		result[i].mac = device[1]
-		result[i].name = device[2]
+func parse(rawScanResult string) map[string]device {
+	matches := re.FindAllStringSubmatch(rawScanResult, -1)
+	devices := make(map[string]device)
+	for _, match := range matches {
+		devices[match[1]] = device{Name: match[2]}
 	}
 
-	return result
+	return devices
 }
 
-func checkNew(device device) bool {
-	value, err := dv.Read(device.mac)
+func readDevice(mac string) *device {
+	value, err := dv.Read(mac)
 	if err != nil {
-		return true
+		return nil
 	}
-	return value == nil
+
+	res := &device{}
+	json.Unmarshal([]byte(value), res)
+
+	return res
 }
 
 func setupPersistence() {
@@ -104,8 +119,9 @@ func setupPersistence() {
 	})
 }
 
-func persist(device device) {
-	err := dv.Write(device.mac, []byte(device.name))
+func persist(mac string, device device) {
+	serialized, _ := json.Marshal(device)
+	err := dv.Write(mac, []byte(serialized))
 	if err != nil {
 		panic(err)
 	}

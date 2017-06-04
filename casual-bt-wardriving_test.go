@@ -10,39 +10,46 @@ func TestParse(t *testing.T) {
 	if len(devices) != 2 {
 		t.Errorf("Expected two devices, got %s", len(devices))
 	}
-	device1 := devices[0]
-	if device1.mac != "12:34:56:78:90:42" || device1.name != "Device 1" {
+	device1, ok := devices["12:34:56:78:90:42"]
+	if ok != true || device1.Name != "Device 1" {
 		t.Error("Wrong values for Device 1")
 	}
-	device2 := devices[1]
-	if device2.mac != "13:37:13:37:13:37" || device2.name != "//Device $('2 " {
+	device2, ok := devices["13:37:13:37:13:37"]
+	if ok != true || device2.Name != "//Device $('2 " {
 		t.Error("Wrong values for Device 2")
 	}
 }
 
-func TestCheckNew(t *testing.T) {
+func TestReadDevice(t *testing.T) {
 	setupPersistence()
-	device1 := device{mac: "12:34:56:78:90:42", name: "Device 1"}
-	persist(device1)
-	defer dv.Erase(device1.mac)
+	mac1 := "12:34:56:78:90:42"
+	device1 := device{Name: "Device 1"}
+	persist(mac1, device1)
+	defer dv.Erase(mac1)
 
-	if checkNew(device1) == true {
+	if readDevice(mac1) == nil {
 		t.Error("Device 1 should be known, but is new")
 	}
 
-	device2 := device{mac: "13:37:13:37:13:37", name: "//Device $('2 "}
-	if checkNew(device2) == false {
+	mac2 := "13:37:13:37:13:37"
+	if readDevice(mac2) != nil {
 		t.Error("Device 2 should be new, but is known")
 	}
 }
 
 func TestPersist(t *testing.T) {
 	setupPersistence()
-	device := device{mac: "12:34:56:78:90:42", name: "Device 1"}
-	persist(device)
-	defer dv.Erase(device.mac)
+	mac := "12:34:56:78:90:42"
+	device := device{Name: "Device 1"}
+	persist(mac, device)
+	defer dv.Erase(mac)
 
-	if checkNew(device) == true {
+	result := readDevice(mac)
+	if result == nil {
 		t.Error("Device not found in persistence")
+	}
+
+	if result.Name != "Device 1" {
+		t.Errorf("Device name should be Device 1, but is %s", result.Name)
 	}
 }

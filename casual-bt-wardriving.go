@@ -19,7 +19,7 @@ type device struct {
 	LastSeen int64
 }
 
-var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)$")
+var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)?$")
 
 var dv *diskv.Diskv
 
@@ -105,7 +105,11 @@ func parse(rawScanResult string) map[string]device {
 	matches := re.FindAllStringSubmatch(rawScanResult, -1)
 	devices := make(map[string]device)
 	for _, match := range matches {
-		devices[match[1]] = device{Name: match[2], LastSeen: time.Now().Unix()}
+		name := match[2]
+		if name == "" {
+			name = match[1]
+		}
+		devices[match[1]] = device{Name: name, LastSeen: time.Now().Unix()}
 	}
 
 	return devices

@@ -144,7 +144,7 @@ func TestSendToEndpoint(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(handlePostRequest))
 	defer ts.Close()
-	sendToEndpoint(ts.URL, devices, done)
+	go sendToEndpoint(ts.URL, devices, done)
 	<-done
 }
 

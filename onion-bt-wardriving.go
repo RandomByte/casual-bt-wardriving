@@ -254,10 +254,12 @@ func sendAllToEndpoint(endpoint string) {
 	sendDone := make(chan error)
 
 	counter := 0
+	sendCounter := 0
 	buffer := make([]deviceFlat, 20, 20)
 	for d := range devices {
 		// Collect 20 devices and send them out -> and repeat
 		if counter == 20 {
+			sendCounter++
 			go sendToEndpoint(endpoint, buffer, sendDone)
 			counter = 0
 		}
@@ -265,10 +267,31 @@ func sendAllToEndpoint(endpoint string) {
 		counter++
 	}
 
+	if counter < 20 {
+		// delete everything after counter-1 index
+		buffer = append(buffer[:counter], buffer[counter+1:]...)
+
+		sendCounter++
+		go sendToEndpoint(endpoint, buffer, sendDone)
+	}
+
+	somethingFailed := false
+
+	for i := 0; i < sendCounter; i++ {
+		e := <-sendDone
+		if e != nil {
+			somethingFailed = true
+			fmt.Printf("Something failed while sending: %v", e)
+		}
+	}
+	if somethingFailed == false {
+		fmt.Printf("Transmitted %v...")
+		sendDoneSignal(endpoint)
+	}
 }
 
 func sendToEndpoint(endpoint string, devices []deviceFlat, done chan error) {
-	defer close(done)
+	fmt.Printf("Sending chung of %v data sets...\n", len(devices))
 	data, err := json.Marshal(devices)
 	if err != nil {
 		fmt.Printf("Error during json marshal %v", err)
@@ -281,9 +304,11 @@ func sendToEndpoint(endpoint string, devices []deviceFlat, done chan error) {
 		done <- err
 		return
 	}
+	done <- nil
 }
 
 func sendDoneSignal(endpoint string) {
+	fmt.Println("Sending done signal...")
 	_, err := http.Get(endpoint + "/done")
 	if err != nil {
 		fmt.Printf("Error signaling done to %s: %v", endpoint+"/done", err)

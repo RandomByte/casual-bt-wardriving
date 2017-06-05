@@ -321,7 +321,7 @@ func sendAllToEndpoint(endpoint string) {
 		}
 	}
 	if somethingFailed == false {
-		fmt.Printf("Transmitted %v...")
+		fmt.Printf("Transmitted %v chunks", sendCounter)
 		sendDoneSignal(endpoint)
 	}
 }

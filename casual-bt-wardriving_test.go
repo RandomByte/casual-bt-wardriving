@@ -89,5 +89,19 @@ func TestHandleKnownDevice(t *testing.T) {
 	// device3 := device{Name: "Device 3", LastSeen: time.Now().Unix() - 5*60*59}
 	// device4 := device{Name: "Device 4", LastSeen: time.Now().Unix() - 5*60*59}
 	// TODO check nameclash handling
+}
 
+func TestGetOledMsg(t *testing.T) {
+	buffer = make([]string, 7, 7)
+	device1 := device{Name: "Device 1", LastSeen: time.Now().Unix() - (5 * 60 * 60) - 1, Count: 8}
+	msg := getOledMsg(device1)
+	if msg != "Device 1 (8x)\n\n\n\n\n\n" {
+		t.Errorf("Expected message Device 1 (8x)\n\n\n\n\n\n, but got %s", msg)
+	}
+
+	device2 := device{Name: "Device 2", LastSeen: time.Now().Unix() - (5 * 60 * 60) - 1, Count: 18}
+	msg = getOledMsg(device2)
+	if msg != "Device 2 (18x)\nDevice 1 (8x)\n\n\n\n\n" {
+		t.Errorf("Expected message Device 2 (18x)\nDevice 1 (8x)\n\n\n\n\n, but got %s", msg)
+	}
 }

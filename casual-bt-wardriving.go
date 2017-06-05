@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -20,11 +21,14 @@ type device struct {
 }
 
 var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)?$")
+var buffer = make([]string, 7, 7)
 
 var dv *diskv.Diskv
 
 func main() {
 	setupPersistence()
+	setupBt()
+	setupOled()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, os.Kill, syscall.SIGTERM)
@@ -62,6 +66,7 @@ func loop() {
 
 func handleNewDevice(mac string, device device) {
 	fmt.Printf("New device %s: %s\n", device.Name, mac)
+	writeOled(device)
 	persist(mac, device)
 }
 
@@ -82,6 +87,7 @@ func handleKnownDevice(mac string, device device, knownDevice device) {
 
 	device.Count = knownDevice.Count + 1
 	fmt.Printf("%vx Known device %s: %s\n", device.Count, device.Name, mac)
+	writeOled(device)
 	persist(mac, device)
 }
 
@@ -96,6 +102,7 @@ func scan() string {
 
 	err := cmd.Run() // will wait for command to return
 	if err != nil {
+		fmt.Println(err)
 		panic(err)
 	}
 	return cmdOutput.String()
@@ -144,5 +151,58 @@ func persist(mac string, device device) {
 	err := dv.Write(mac, []byte(serialized))
 	if err != nil {
 		panic(err)
+	}
+}
+
+func setupBt() {
+	cmd := exec.Command("hciconfig", "hci0", "up")
+
+	err := cmd.Run() // will wait for command to return
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func setupOled() {
+	cmd := exec.Command("oled-exp", "-i")
+
+	err := cmd.Run() // will wait for command to return
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func getOledMsg(device device) string {
+	msg := fmt.Sprintf("%s (%vx)", device.Name, device.Count)
+
+	_, buffer = buffer[len(buffer)-1], buffer[:len(buffer)-1]
+	buffer = append([]string{msg}, buffer...)
+
+	return strings.Join(buffer, "\n")
+}
+
+func writeOled(device device) {
+	cmd := exec.Command("oled-exp", "cursor 0,0 write", getOledMsg(device))
+
+	err := cmd.Run() // will wait for command to return
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	notify()
+}
+
+func notify() {
+	cmdBlue := exec.Command("expled", "0x0000ff")
+
+	err := cmdBlue.Run() // will wait for command to return
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	cmdOff := exec.Command("expled", "0x000000")
+	err = cmdOff.Run() // will wait for command to return
+	if err != nil {
+		fmt.Println(err)
 	}
 }

@@ -1,6 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -92,7 +96,7 @@ func TestHandleKnownDevice(t *testing.T) {
 }
 
 func TestWriteOled(t *testing.T) {
-	displayBuffer = make([]string, 8, 8) // initialize
+	displayBuffer = make([]string, 8) // initialize
 	device1 := device{Name: "Device 1", LastSeen: time.Now().Unix() - (5 * 60 * 60) - 1, Count: 8}
 	writeOled(device1)
 
@@ -114,5 +118,58 @@ func TestWriteOled(t *testing.T) {
 	}
 	if displayBuffer[0] != "Device 2 (18x)       " {
 		t.Errorf("Expected first line to be Device 2 (18x)       , but got %s", displayBuffer[0])
+	}
+}
+
+func TestSendToEndpoint(t *testing.T) {
+	device1 := deviceFlat{Mac: "12:34:56:78:90:42"}
+	device1.Name = "Device 1"
+	device2 := deviceFlat{Mac: "13:37:13:37:13:37"}
+	device1.Name = "//Device $('2 "
+
+	devices := []deviceFlat{device1, device2}
+	done := make(chan error)
+
+	handlePostRequest := func(rw http.ResponseWriter, req *http.Request) {
+		decoder := json.NewDecoder(req.Body)
+		var requestDevices []deviceFlat
+		err := decoder.Decode(&requestDevices)
+		if err != nil {
+			panic(err)
+		}
+		if reflect.DeepEqual(requestDevices, devices) != true {
+			t.Error("Requested devices don't match original list")
+		}
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(handlePostRequest))
+	defer ts.Close()
+	sendToEndpoint(ts.URL, devices, done)
+	<-done
+}
+
+func TestCollectEntries(t *testing.T) {
+	setupPersistence()
+	mac1 := "12:34:56:78:90:42"
+	device1 := device{Name: "Device 1"}
+	persist(mac1, device1)
+	defer dv.Erase(mac1)
+
+	mac2 := "13:37:13:37:13:37"
+	device2 := device{Name: "//Device $('2 "}
+	persist(mac2, device2)
+	defer dv.Erase(mac2)
+
+	devices := make(chan deviceFlat, 2)
+	go collectEntries(devices)
+
+	result1 := <-devices
+	if result1.Mac != mac1 || result1.Name != device1.Name {
+		t.Error("Wrong values for Device 1")
+	}
+
+	result2 := <-devices
+	if result2.Mac != mac2 || result2.Name != device2.Name {
+		t.Error("Wrong values for Device 2")
 	}
 }

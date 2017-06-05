@@ -15,3 +15,5 @@
 
 out/
 diskv-data/
+
+.DS_Store

@@ -92,18 +92,27 @@ func TestHandleKnownDevice(t *testing.T) {
 }
 
 func TestWriteOled(t *testing.T) {
-	buffer = make([]string, 8, 8)
+	displayBuffer = make([]string, 8, 8) // initialize
 	device1 := device{Name: "Device 1", LastSeen: time.Now().Unix() - (5 * 60 * 60) - 1, Count: 8}
 	writeOled(device1)
-	msg := getOledMsg()
-	if msg != "Device 1 (8x)\n\n\n\n\n\n\n" {
-		t.Errorf("Expected message Device 1 (8x)\n\n\n\n\n\n\n, but got %s", msg)
+
+	if displayBuffer[1] != "" {
+		t.Errorf("Expected second line to be empty, but got %s", displayBuffer[1])
+	}
+	if displayBuffer[0] != "Device 1 (8x)        " {
+		t.Errorf("Expected first line to be Device 1 (8x)        , but got %s", displayBuffer[0])
 	}
 
 	device2 := device{Name: "Device 2", LastSeen: time.Now().Unix() - (5 * 60 * 60) - 1, Count: 18}
 	writeOled(device2)
-	msg = getOledMsg()
-	if msg != "Device 2 (18x)\nDevice 1 (8x)\n\n\n\n\n\n" {
-		t.Errorf("Expected message Device 2 (18x)\nDevice 1 (8x)\n\n\n\n\n\n, but got %s", msg)
+
+	if displayBuffer[2] != "" {
+		t.Errorf("Expected third line to be empty, but got %s", displayBuffer[2])
+	}
+	if displayBuffer[1] != "Device 1 (8x)        " {
+		t.Errorf("Expected second line to be Device 1 (8x)        , but got %s", displayBuffer[1])
+	}
+	if displayBuffer[0] != "Device 2 (18x)       " {
+		t.Errorf("Expected first line to be Device 2 (18x)       , but got %s", displayBuffer[0])
 	}
 }

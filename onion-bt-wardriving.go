@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/peterbourgon/diskv"
+	"github.com/xperimental/onion-weather/oled"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -21,7 +22,8 @@ type device struct {
 }
 
 var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)?$")
-var buffer = make([]string, 8, 8)
+var displayBuffer = make([]string, 8, 8)
+var display oled.Display
 
 var dv *diskv.Diskv
 
@@ -29,6 +31,7 @@ func main() {
 	setupPersistence()
 	setupBt()
 	setupOled()
+	defer display.Close()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, os.Kill, syscall.SIGTERM)
@@ -178,41 +181,40 @@ func setupBt() {
 }
 
 func setupOled() {
-	cmd := exec.Command("oled-exp", "-i")
-
-	err := cmd.Run() // will wait for command to return
+	var err error
+	display, err = oled.NewOled()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error during OLED setup: %s", err)
+		panic(err)
+	}
+
+	if err := display.Init(); err != nil {
+		fmt.Printf("Error during OLED init: %s", err)
+		panic(err)
 	}
 }
 
 func writeOled(device device) {
-	msg := fmt.Sprintf("%s (%vx)", device.Name, device.Count)
-
-	_, buffer = buffer[len(buffer)-1], buffer[:len(buffer)-1]
-	buffer = append([]string{msg}, buffer...)
+	line := fmt.Sprintf("%s (%vx)", device.Name, device.Count)
+	if len(line) < 21 {
+		fill := strings.Repeat(" ", 21-len(line))
+		line += fill
+	}
+	// New line goes on top -> remove last line first
+	_, displayBuffer = displayBuffer[len(displayBuffer)-1], displayBuffer[:len(displayBuffer)-1]
+	displayBuffer = append([]string{line}, displayBuffer...)
 }
 
 func getOledMsg() string {
-	return strings.Join(buffer, "\n")
+	return strings.Join(displayBuffer, "")
 }
 
 func flushOled() {
-	cmd := exec.Command("/bin/sh", "write-oled.sh", "\""+getOledMsg()+"\"")
-
-	// cmd := exec.Command("/usr/sbin/oled-exp", "cursor 0,0 write stf")
-	fmt.Printf("==> Executing: %s\n", strings.Join(cmd.Args, " "))
-
-	// Stdout buffer
-	cmdOutput := &bytes.Buffer{}
-	// Attach buffer to command
-	cmd.Stdout = cmdOutput
-
-	err := cmd.Run() // will wait for command to return
+	display.Clear()
+	err := display.Write(getOledMsg())
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error during output: %s", err)
 	}
-	fmt.Printf("==> Output: %s\n", string(cmdOutput.Bytes()))
 }
 
 func notify() {

@@ -21,7 +21,7 @@ type device struct {
 }
 
 var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)?$")
-var buffer = make([]string, 7, 7)
+var buffer = make([]string, 8, 8)
 
 var dv *diskv.Diskv
 
@@ -54,13 +54,25 @@ func loop() {
 	}()
 	result := scan()
 	parsed := parse(result)
+	var somethingHappend bool
+
 	for mac, device := range parsed {
 		knownDevice := readDevice(mac)
 		if knownDevice == nil {
 			handleNewDevice(mac, device)
+			somethingHappend = true
 		} else {
-			handleKnownDevice(mac, device, *knownDevice)
+			ignored := handleKnownDevice(mac, device, *knownDevice)
+			if ignored != true {
+				somethingHappend = true
+			}
 		}
+	}
+
+	if somethingHappend == true {
+		// Something happened
+		flushOled()
+		notify()
 	}
 }
 
@@ -70,10 +82,10 @@ func handleNewDevice(mac string, device device) {
 	persist(mac, device)
 }
 
-func handleKnownDevice(mac string, device device, knownDevice device) {
+func handleKnownDevice(mac string, device device, knownDevice device) bool {
 	if time.Since(time.Unix(knownDevice.LastSeen, 0)).Hours() < 5 {
 		// Last seen less then five hours ago
-		return
+		return true
 	}
 
 	if device.Name != knownDevice.Name {
@@ -89,6 +101,8 @@ func handleKnownDevice(mac string, device device, knownDevice device) {
 	fmt.Printf("%vx Known device %s: %s\n", device.Count, device.Name, mac)
 	writeOled(device)
 	persist(mac, device)
+
+	return false
 }
 
 func scan() string {
@@ -172,24 +186,33 @@ func setupOled() {
 	}
 }
 
-func getOledMsg(device device) string {
+func writeOled(device device) {
 	msg := fmt.Sprintf("%s (%vx)", device.Name, device.Count)
 
 	_, buffer = buffer[len(buffer)-1], buffer[:len(buffer)-1]
 	buffer = append([]string{msg}, buffer...)
+}
 
+func getOledMsg() string {
 	return strings.Join(buffer, "\n")
 }
 
-func writeOled(device device) {
-	cmd := exec.Command("oled-exp", "cursor 0,0 write", getOledMsg(device))
+func flushOled() {
+	cmd := exec.Command("/bin/sh", "write-oled.sh", "\""+getOledMsg()+"\"")
+
+	// cmd := exec.Command("/usr/sbin/oled-exp", "cursor 0,0 write stf")
+	fmt.Printf("==> Executing: %s\n", strings.Join(cmd.Args, " "))
+
+	// Stdout buffer
+	cmdOutput := &bytes.Buffer{}
+	// Attach buffer to command
+	cmd.Stdout = cmdOutput
 
 	err := cmd.Run() // will wait for command to return
 	if err != nil {
 		fmt.Println(err)
 	}
-
-	notify()
+	fmt.Printf("==> Output: %s\n", string(cmdOutput.Bytes()))
 }
 
 func notify() {

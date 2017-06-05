@@ -28,7 +28,13 @@ type deviceFlat struct {
 	Mac string
 }
 
-var re = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)?$")
+type nameclash struct {
+	Count int
+	Names []string
+}
+
+var deviceRe = regexp.MustCompile("(?im)^[^0-9a-f]*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\\s*([^\\s].*)?$")
+var prefixRe = regexp.MustCompile("^device-(.*)$")
 var displayBuffer = make([]string, 8)
 var display oled.Display
 
@@ -109,9 +115,36 @@ func handleKnownDevice(mac string, device device, knownDevice device) bool {
 	if device.Name != knownDevice.Name {
 		fmt.Printf("Same MAC but different name: %s (new) vs. %s (known)\n", device.Name, knownDevice.Name)
 
-		err := dv.Write("nameclash"+mac+string(time.Now().Unix()), []byte(fmt.Sprintf("%s, %s (new) vs. %s (known)", mac, device.Name, knownDevice.Name)))
+		key := "nameclash-" + mac
+		value, err := dv.Read(key)
+
+		var clash nameclash
 		if err != nil {
-			fmt.Println(err)
+			clash = nameclash{Names: []string{device.Name, knownDevice.Name}}
+		} else {
+			c := &nameclash{}
+			json.Unmarshal([]byte(value), c)
+			clash = *c
+			clash.Count++
+			alreadyKnown := false
+			for _, n := range clash.Names {
+				if n == device.Name {
+					alreadyKnown = true
+					break
+				}
+			}
+			if alreadyKnown == false {
+				clash.Names = append(clash.Names, device.Name)
+			}
+		}
+
+		serialized, err := json.Marshal(clash)
+		if err != nil {
+			fmt.Printf("Error while marshaling nameclash: %v\n", err)
+		}
+		err = dv.Write(key, serialized)
+		if err != nil {
+			fmt.Printf("Error while writing nameclash: %v\n", err)
 		}
 	}
 
@@ -141,7 +174,7 @@ func scan() string {
 }
 
 func parse(rawScanResult string) map[string]device {
-	matches := re.FindAllStringSubmatch(rawScanResult, -1)
+	matches := deviceRe.FindAllStringSubmatch(rawScanResult, -1)
 	devices := make(map[string]device)
 	for _, match := range matches {
 		name := match[2]
@@ -155,7 +188,7 @@ func parse(rawScanResult string) map[string]device {
 }
 
 func readDevice(mac string) *device {
-	value, err := dv.Read(mac)
+	value, err := dv.Read("device-" + mac)
 	if err != nil {
 		return nil
 	}
@@ -179,8 +212,11 @@ func setupPersistence() {
 }
 
 func persist(mac string, device device) {
-	serialized, _ := json.Marshal(device)
-	err := dv.Write(mac, []byte(serialized))
+	serialized, err := json.Marshal(device)
+	if err != nil {
+		fmt.Printf("Error while marshaling device: %v\n", err)
+	}
+	err = dv.Write("device-"+mac, []byte(serialized))
 	if err != nil {
 		panic(err)
 	}
@@ -291,7 +327,7 @@ func sendAllToEndpoint(endpoint string) {
 }
 
 func sendToEndpoint(endpoint string, devices []deviceFlat, done chan error) {
-	fmt.Printf("Sending chung of %v data sets...\n", len(devices))
+	fmt.Printf("Sending chunk of %v data sets...\n", len(devices))
 	data, err := json.Marshal(devices)
 	if err != nil {
 		fmt.Printf("Error during json marshal %v", err)
@@ -317,15 +353,22 @@ func sendDoneSignal(endpoint string) {
 
 func collectEntries(devices chan deviceFlat) {
 	cancel := make(chan struct{})
-	c := dv.Keys(cancel)
-	for mac := range c {
+	c := dv.KeysPrefix("device-", cancel)
+	for key := range c {
+		matches := prefixRe.FindStringSubmatch(key)
+		if len(matches) == 0 {
+			// No device (probably nameclash)
+			continue
+		}
+		mac := matches[1]
 		deviceData := readDevice(mac)
 		if deviceData == nil {
 			fmt.Printf("Failed to read device with key %s\n", mac)
+		} else {
+			device := deviceFlat{Mac: mac}
+			device.device = *deviceData
+			devices <- device
 		}
-		device := deviceFlat{Mac: mac}
-		device.device = *deviceData
-		devices <- device
 	}
 	close(devices)
 }

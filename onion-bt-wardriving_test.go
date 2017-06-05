@@ -39,7 +39,7 @@ func TestReadDevice(t *testing.T) {
 	mac1 := "12:34:56:78:90:42"
 	device1 := device{Name: "Device 1"}
 	persist(mac1, device1)
-	defer dv.Erase(mac1)
+	defer dv.Erase("device-" + mac1)
 
 	if readDevice(mac1) == nil {
 		t.Error("Device 1 should be known, but is new")
@@ -56,7 +56,7 @@ func TestPersist(t *testing.T) {
 	mac := "12:34:56:78:90:42"
 	device := device{Name: "Device 1"}
 	persist(mac, device)
-	defer dv.Erase(mac)
+	defer dv.Erase("device-" + mac)
 
 	result := readDevice(mac)
 	if result == nil {
@@ -72,7 +72,7 @@ func TestHandleKnownDevice(t *testing.T) {
 	mac := "12:34:56:78:90:42"
 	device1 := device{Name: "Device 1", LastSeen: time.Now().Unix() - (5 * 60 * 60) + 1}
 	handleKnownDevice(mac, device1, device1)
-	defer dv.Erase(mac)
+	defer dv.Erase("device-" + mac)
 
 	if readDevice(mac) != nil {
 		t.Error("Device 1 should not have been handled")
@@ -153,12 +153,12 @@ func TestCollectEntries(t *testing.T) {
 	mac1 := "12:34:56:78:90:42"
 	device1 := device{Name: "Device 1"}
 	persist(mac1, device1)
-	defer dv.Erase(mac1)
+	defer dv.Erase("device-" + mac1)
 
 	mac2 := "13:37:13:37:13:37"
 	device2 := device{Name: "//Device $('2 "}
 	persist(mac2, device2)
-	defer dv.Erase(mac2)
+	defer dv.Erase("device-" + mac2)
 
 	devices := make(chan deviceFlat, 2)
 	go collectEntries(devices)
